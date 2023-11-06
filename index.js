@@ -26,19 +26,31 @@ async function run() {
         const booksCollection = client.db("NovelNexusDB").collection("Books");
 
         // get books category
-        app.get("/category", async(req, res)=>{
+        app.get("/category", async (req, res) => {
             const result = await categoryCollection.find().toArray()
             res.send(result)
         })
         // post book 
-        app.post('/books', async(req, res)=>{
+        app.post('/books', async (req, res) => {
             const book = req.body
             const result = await booksCollection.insertOne(book)
             res.send(result)
         })
 
+
+        app.get("/books", async (req, res) => {
+
+            let query = {}
+            if (req.query?.book_category) {
+                query = { category: req.query.book_category }
+            }
+
+            const result = await booksCollection.find(query).toArray()
+            res.send(result)
+        })
+
         // get all the book
-        app.get("/books", async(req, res)=>{
+        app.get("/books", async (req, res) => {
             const result = await booksCollection.find().toArray()
             res.send(result)
         })
