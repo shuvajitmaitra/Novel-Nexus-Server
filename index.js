@@ -62,7 +62,6 @@ async function run() {
         app.put('/books/:id', async (req, res) => {
             const id = req.params.id;
             const data = req.body;
-            console.log("id", id, data);
             const bookId = { _id: new ObjectId(id) };
             const options = { upsert: true };
             const updatedQuantity = {
@@ -86,20 +85,28 @@ async function run() {
         })
         // add data to the borrowed collection
         app.post("/borrowed", async(req, res )=>{
-            const {email,
+            const {
+                email,
+                objectId,
+                return_date,
+                borrowed_date,
                 book_name,
                 image,
                 author_name,
                 category,
                 book_rating,
                 short_description,
-                book_quantity,} = req.body
-            const existingBook = await borrowedCollection.findOne({book_name});
+                book_quantity
+            } = req.body
+            const existingBook = await borrowedCollection.findOne({objectId});
 
             if (existingBook) {
                 return res.send({ error: 'Book already exists' });
                 }
             const result = await borrowedCollection.insertOne( {email,
+                objectId,
+                return_date,
+                borrowed_date,
                 book_name,
                 image,
                 author_name,
@@ -110,7 +117,13 @@ async function run() {
             res.send(result)
         })
 
-
+        // Delete borrowed Book 
+        app.delete("/borrowed/:id", async(req, res)=>{
+            const id = req.params.id
+            const userId = {_id: new ObjectId(id)}
+            const result = await borrowedCollection.deleteOne(userId)
+            res.send(result)
+        })
 
         // Connect the client to the server	(optional starting in v4.7)
         client.connect();
