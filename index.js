@@ -8,12 +8,9 @@ const port = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-console.log();
-console.log();
 
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
-// ${process.env.DB_USER}
-// ${process.env.DB_PASS}
+
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.wyy6auz.mongodb.net/?retryWrites=true&w=majority`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -30,6 +27,14 @@ async function run() {
         const categoryCollection = client.db("NovelNexusDB").collection("Category");
         const booksCollection = client.db("NovelNexusDB").collection("Books");
         const borrowedCollection = client.db("NovelNexusDB").collection("Borrowed");
+        const reviewsCollection = client.db("NovelNexusDB").collection("Reviews");
+        const slidersCollection = client.db("NovelNexusDB").collection("Sliders");
+
+        app.get('/slider', async(req, res) =>{
+            const result = await slidersCollection.find().toArray()
+            res.send(result)
+        })
+
 
         // get books category
         app.get("/category", async (req, res) => {
@@ -61,6 +66,11 @@ async function run() {
             }
 
             const result = await booksCollection.find(query).toArray()
+            res.send(result)
+        })
+
+        app.get("/reviews", async(req, res) =>{
+            const result = await reviewsCollection.find().toArray()
             res.send(result)
         })
         // update quantity 
