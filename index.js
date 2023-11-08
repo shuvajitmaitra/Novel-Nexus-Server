@@ -1,12 +1,18 @@
 const express = require("express");
 const cors = require("cors");
+const jwt = require('jsonwebtoken')
+const cookieParser = require('cookie-parser')
 require('dotenv').config();
 const app = express();
 
 const port = process.env.PORT || 5000;
 
-app.use(cors());
+app.use(cors({
+    origin:['http://localhost:5173' || 'http://localhost:5173'],
+    credentials: true
+}));
 app.use(express.json());
+app.use(cookieParser())
 
 
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
@@ -22,6 +28,21 @@ const client = new MongoClient(uri, {
     }
 });
 
+const verifyToken = async (req, res, next)=>{
+    const token = req.cookies.token;
+    // console.log(token);
+    if(!token){
+        return res.status(404).send({message: "Unauthorize Access"})
+    }
+    jwt.verify(token, process.env.ACCESS_TOKEN_SECRETE, (err, decoded)=>{
+        if(err){
+            return res.status(404).send({message: "Unauthorize Access"})
+        }
+        req.user = decoded
+        next()
+    })
+}
+
 async function run() {
     try {
         const categoryCollection = client.db("NovelNexusDB").collection("Category");
@@ -29,12 +50,43 @@ async function run() {
         const borrowedCollection = client.db("NovelNexusDB").collection("Borrowed");
         const reviewsCollection = client.db("NovelNexusDB").collection("Reviews");
         const slidersCollection = client.db("NovelNexusDB").collection("Sliders");
+        const requestCollection = client.db("NovelNexusDB").collection("bookRequests");
+        // token.........
+        app.post('/jwt', async(req, res) =>{
+            const user = req.body;
+            const token = jwt.sign(user,process.env.ACCESS_TOKEN_SECRETE, {expiresIn: "1h"})
+            res
+            .cookie("token", token,{
+                httpOnly: true,
+                secure: false,
+            }).send({success: true})
+        })
 
+        app.post("/logout", async (req, res)=>{
+            const user = req.body
+            res.clearCookie("token", {maxAge: 0}).send({success : true})
+        })
+
+
+
+        
         app.get('/slider', async(req, res) =>{
             const result = await slidersCollection.find().toArray()
             res.send(result)
         })
 
+
+        app.post('/book-request', async(req, res)=>{
+            const request = req.body
+            const {book_name} = request;
+            const existingBook = await requestCollection.findOne({book_name});
+
+            if (existingBook) {
+                return res.send({ error: 'Already in Request list' });
+                }
+            const result = await requestCollection.insertOne(request)
+            res.send(result)
+        })
 
         // get books category
         app.get("/category", async (req, res) => {
@@ -73,6 +125,12 @@ async function run() {
             const result = await reviewsCollection.find().toArray()
             res.send(result)
         })
+
+        app.post("/reviews", async(req, res)=>{
+            const data = req.body
+            const result = await reviewsCollection.insertOne(data)
+            res.send(result)
+        })
         // update quantity 
         app.put('/books/:id', async (req, res) => {
             const id = req.params.id;
@@ -93,8 +151,11 @@ async function run() {
         })
 
         // load card data 
-        app.get("/borrowed/:email", async(req, res)=>{
+        app.get("/borrowed/:email",verifyToken, async(req, res)=>{
             const {email} = req.params
+            if(req.user.email !== req.params.email){
+                return res.status(401).send({message: "Forbidden"})
+            }
             const result = await borrowedCollection.find({email}).toArray()
             res.send(result)
         })
