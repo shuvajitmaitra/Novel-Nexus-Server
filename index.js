@@ -8,18 +8,19 @@ const app = express();
 const port = process.env.PORT || 5000;
 
 app.use(cors({
-    origin:['http://localhost:5173' || 'http://localhost:5173'],
-    credentials: true
+    origin:["http://localhost:5173","https://novel-nexus-io.web.app" ], 
+    credentials: true    
 }));
 app.use(express.json());
 app.use(cookieParser())
 
-
+//   https://novel-nexus-io.web.app
+ //   https://assignment-11-novel-nexus-server.vercel.app
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.wyy6auz.mongodb.net/?retryWrites=true&w=majority`;
 
-// Create a MongoClient with a MongoClientOptions object to set the Stable API version
+
 const client = new MongoClient(uri, {
     serverApi: {
         version: ServerApiVersion.v1,
@@ -27,18 +28,23 @@ const client = new MongoClient(uri, {
         deprecationErrors: true,
     }
 });
-
+const logger = async (req, res, next)=>{
+    console.log("logger", req.method, req,URL);
+    next()
+}
 const verifyToken = async (req, res, next)=>{
-    const token = req.cookies.token;
-    // console.log(token);
+    const token = req?.cookies?.token;
+
+    console.log(token);
     if(!token){
-        return res.status(404).send({message: "Unauthorize Access"})
+        return res.status(404).send({message: "Unauthorize Access 1"})
     }
     jwt.verify(token, process.env.ACCESS_TOKEN_SECRETE, (err, decoded)=>{
         if(err){
-            return res.status(404).send({message: "Unauthorize Access"})
+            return res.status(404).send({message: "Unauthorize Access 2"})
         }
         req.user = decoded
+
         next()
     })
 }
@@ -50,6 +56,7 @@ async function run() {
         const borrowedCollection = client.db("NovelNexusDB").collection("Borrowed");
         const reviewsCollection = client.db("NovelNexusDB").collection("Reviews");
         const slidersCollection = client.db("NovelNexusDB").collection("Sliders");
+        const adminCollection = client.db("NovelNexusDB").collection("Admin");
         const requestCollection = client.db("NovelNexusDB").collection("bookRequests");
         // token.........
         app.post('/jwt', async(req, res) =>{
@@ -58,13 +65,14 @@ async function run() {
             res
             .cookie("token", token,{
                 httpOnly: true,
-                secure: false,
-            }).send({success: true})
+                secure: true,
+                sameSite: 'none'
+            }).send("Token Generated")
         })
 
         app.post("/logout", async (req, res)=>{
             const user = req.body
-            res.clearCookie("token", {maxAge: 0}).send({success : true})
+            res.clearCookie("token", {maxAge: 0}).send("Token Cleared")
         })
 
 
@@ -93,13 +101,8 @@ async function run() {
             const result = await categoryCollection.find().toArray()
             res.send(result)
         })
-        // post book 
-        app.post('/books', async (req, res) => {
-            const book = req.body
-            const result = await booksCollection.insertOne(book)
-            res.send(result)
-        })
-
+        
+            
         app.get("/books/:id", async (req, res) => {
             const id = req.params.id;
             const query = {
@@ -109,30 +112,78 @@ async function run() {
             // console.log(result);
             res.send(result);
         });
-        // data get form the database
-        app.get("/books", async (req, res) => {
+        // data get form the database for.......allBook.jsx
+        app.get("/allBooks",logger, verifyToken, async (req, res) => {
+            const userEmail = req.query.email;
 
-            let query = {}
-            if (req.query?.book_category) {
-                query = { category: req.query.book_category }
+            if(req.user.email !== userEmail){
+                return res.status(401).send({message: "Forbidden"})
             }
+           
+            const result = await booksCollection.find().toArray()
+            res.send(result)
+        })
 
+         // filter by quantity.............allBook.jsx 
+         app.get("/bookfilter", async(req, res) =>{
+            const query = {book_quantity : {$gt : 0}}
             const result = await booksCollection.find(query).toArray()
             res.send(result)
         })
 
-        app.get("/reviews", async(req, res) =>{
-            const result = await reviewsCollection.find().toArray()
+        // post book for addBook component......addBook.jsx
+        app.post('/postBooks', async (req, res) => {
+            const userEmail = req.query.email
+            if(req.user.email !== userEmail){
+                return res.status(401).send({message: "Forbidden"})
+            }
+            const book = req.body
+            console.log(book);
+            const result = await booksCollection.insertOne(book)
             res.send(result)
         })
 
-        app.post("/reviews", async(req, res)=>{
-            const data = req.body
-            const result = await reviewsCollection.insertOne(data)
-            res.send(result)
+        // book update for update form
+        app.put("/update-books/:id", async(req, res)=>{
+            const id = req.params.id;
+            const data = req.body;
+            const bookId = { _id: new ObjectId(id) };
+            const options = { upsert: true };
+            const updatedBooks = {
+                $set: {
+                    book_quantity: data.book_quantity,
+                    book_name: data.book_name,
+                    image: data.image,
+                    book_quantity: data.book_quantity,
+                    author_name: data.author_name,
+                    category: data.category,
+                    book_rating: data.book_rating,
+                    short_description: data.short_description,
+                    book_summary: data.book_summary,
+                },
+            };
+            const result = await booksCollection.updateOne(
+                bookId,
+                updatedBooks,
+                options
+            );
+            res.send(result);
         })
-        // update quantity 
-        app.put('/books/:id', async (req, res) => {
+
+        // data load by category ..........CategorizedBooks.jsx
+        app.get("/categorizedBooks", async(req, res)=>{
+           const category = req.query.book_category
+
+           let query = {}
+           if (category) {
+               query = { category: category }
+           }
+           const result = await booksCollection.find(query).toArray()
+            res.send(result)
+        }) 
+
+          // update quantity 
+          app.put('/books/:id', async (req, res) => {
             const id = req.params.id;
             const data = req.body;
             const bookId = { _id: new ObjectId(id) };
@@ -150,15 +201,22 @@ async function run() {
             res.send(result);
         })
 
-        // load card data 
-        app.get("/borrowed/:email",verifyToken, async(req, res)=>{
-            const {email} = req.params
-            if(req.user.email !== req.params.email){
-                return res.status(401).send({message: "Forbidden"})
-            }
-            const result = await borrowedCollection.find({email}).toArray()
+       
+
+
+        app.get("/reviews", async(req, res) =>{
+            const result = await reviewsCollection.find().toArray()
             res.send(result)
         })
+
+        app.post("/reviews", async(req, res)=>{
+            const data = req.body
+            const result = await reviewsCollection.insertOne(data)
+            res.send(result)
+        })
+      
+
+       
         // add data to the borrowed collection
         app.post("/borrowed", async(req, res )=>{
             const {
@@ -174,11 +232,17 @@ async function run() {
                 short_description,
                 book_quantity
             } = req.body
-            const existingBook = await borrowedCollection.findOne({objectId});
+            console.log(email, objectId);
 
-            if (existingBook) {
-                return res.send({ error: 'Book already exists' });
-                }
+            const idQuery = {objectId : {$eq : objectId}}
+            const emailQuery = {email : {$eq: email}}
+            
+            const idExist = await borrowedCollection.findOne(idQuery);
+            const emailExist = await borrowedCollection.findOne(emailQuery);
+            
+            if (idExist && emailExist) {
+                return res.send({ error: 'Book  exists', email: email, obj:objectId });
+            }
             const result = await borrowedCollection.insertOne( {email,
                 objectId,
                 return_date,
@@ -193,6 +257,20 @@ async function run() {
             res.send(result)
         })
 
+         // load card data 
+         app.get("/borrowed/:email", logger, verifyToken, async(req, res)=>{
+            const {email} = req.params
+            console.log("/borrowed",email);
+                console.log(req.user.email);
+            if(req.user.email !== req.params.email){
+                return res.status(401).send({message: "Forbidden"})
+            }
+
+            const query = {email : {$eq : email}}
+            const result = await borrowedCollection.find(query).toArray()
+            res.send(result)
+        })
+
         // Delete borrowed Book 
         app.delete("/borrowed/:id", async(req, res)=>{
             const id = req.params.id
@@ -201,14 +279,22 @@ async function run() {
             res.send(result)
         })
 
-        // Connect the client to the server	(optional starting in v4.7)
-        client.connect();
-        // Send a ping to confirm a successful connection
-        client.db("admin").command({ ping: 1 });
+        // admin
+        app.get('/admin', async(req, res)=>{
+            const email = req.query.email
+           if(email != 'librarian@gmail.com'){
+            return res.send('')
+           }
+            const result = await adminCollection.find().toArray()
+
+            res.send(["Authorized"])
+            
+        })
+
+       
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
     } finally {
 
-        // await client.close();
     }
 }
 run().catch(console.dir);
